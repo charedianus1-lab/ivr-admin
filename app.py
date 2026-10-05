@@ -128,7 +128,7 @@ def need_auth(f):
         return f(*a, **k)
     return w
 def csrf_ok():
-    return hmac.compare_digest(request.headers.get('X-CSRF', '') or request.form.get('csrf', ''), session.get('csrf', 'x'))
+    return hmac.compare_digest((request.headers.get('X-CSRF', '') or request.form.get('csrf', '')).encode(), session.get('csrf', 'x').encode())
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -138,7 +138,7 @@ def login():
     if n >= 5 and time.time() - t < 900:
         return render_template_string(PAGE_LOGIN, msg='יותר מדי ניסיונות, נסה שוב בעוד 15 דקות'), 429
     if request.method == 'POST':
-        if ADMIN_PASSWORD and hmac.compare_digest(request.form.get('password', ''), ADMIN_PASSWORD):
+        if ADMIN_PASSWORD and hmac.compare_digest(request.form.get('password', '').encode(), ADMIN_PASSWORD.encode()):
             session.permanent = True; session['ok'] = True; session['csrf'] = hashlib.sha256(os.urandom(16)).hexdigest()
             FAILS.pop(ip, None); return redirect('/')
         FAILS[ip] = (n + 1, time.time()); msg = 'סיסמה שגויה'
