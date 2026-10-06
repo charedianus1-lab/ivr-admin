@@ -84,7 +84,8 @@ def save(cfg, remote=True):
         json.dump(cfg, open(DATA, 'w', encoding='utf-8'), ensure_ascii=False)
     if remote and YM_SYSTEM and YM_PASS:
         try: ym_upload_text(json.dumps(cfg, ensure_ascii=False), REMOTE_CFG)
-        except Exception: pass
+        except Exception as e: return str(e)[:150] or 'upload failed'
+    return None
 
 def clean_items(items):
     out, seen = [], set()
@@ -168,8 +169,8 @@ def api_save():
     cfg['items'] = clean_items(j.get('items', []))
     cfg['greeting_pre'] = str(j.get('greeting_pre', ''))[:200]
     cfg['greeting_post'] = str(j.get('greeting_post', ''))[:200]
-    save(cfg)
-    return jsonify(ok=True, greeting=greeting(cfg))
+    warn = save(cfg)
+    return jsonify(ok=True, greeting=greeting(cfg), warn=warn)
 
 @app.route('/api/preview')
 @need_auth
@@ -240,7 +241,7 @@ function gr(){const p=document.getElementById('pre').value,q=document.getElement
 document.getElementById('pre').oninput=gr;document.getElementById('post').oninput=gr;
 function say(t,ok){const m=document.getElementById('msg');m.textContent=t;m.className=ok?'ok':'er'}
 async function post(u,b){const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF':CSRF},body:JSON.stringify(b||{})});return r.json()}
-async function saveAll(){const j=await post('/api/save',{items,greeting_pre:document.getElementById('pre').value,greeting_post:document.getElementById('post').value});say(j.ok?'נשמר':'שגיאה',j.ok);return j.ok}
+async function saveAll(){const j=await post('/api/save',{items,greeting_pre:document.getElementById('pre').value,greeting_post:document.getElementById('post').value});say(j.ok?(j.warn?'נשמר באתר, אבל הגיבוי לימות נכשל: '+j.warn:'נשמר'):'שגיאה',j.ok&&!j.warn);return j.ok}
 async function prev(){if(!await saveAll())return;const a=document.getElementById('au');a.style.display='inline';a.src='/api/preview?'+Date.now();a.play()}
 async function pub(){if(!await saveAll())return;if(!confirm('לפרסם את השלוחות וההקראה לקו החי?'))return;say('מפרסם...',true);const j=await post('/api/publish');say(j.ok?'פורסם '+j.at:'שגיאה: '+j.error,j.ok)}
 async function rb(){if(!confirm('לחזור לגרסה הקודמת ולפרסם אותה?'))return;const j=await post('/api/rollback');say(j.ok?'הוחזר':'שגיאה: '+j.error,j.ok);if(j.ok)setTimeout(()=>location.reload(),800)}
