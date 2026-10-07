@@ -3,7 +3,7 @@ import os, re, io, json, time, wave, hmac, asyncio, hashlib, threading
 import requests
 import copy, uuid
 from urllib.parse import urlparse, parse_qs, urlencode
-from flask import Flask, request, session, redirect, url_for, render_template_string, jsonify, Response
+from flask import Response, Flask, request, session, redirect, url_for, render_template_string, jsonify, Response
 
 app = Flask(__name__)
 YM_SYSTEM = os.environ.get('YM_SYSTEM', '')
@@ -252,6 +252,27 @@ def api_song_links():
         return jsonify(ok=True, songs=[clean_song(x) for x in data['songs']])
     except Exception as e: return jsonify(ok=False, error=str(e)[:200]), 502
 
+@app.route('/admin/app')
+@need_auth
+def download_admin_apk():
+    try:
+        r=requests.get('https://api.github.com/repos/charedianus1-lab/ivr-admin/releases/tags/ivr-admin-apk-v1',timeout=20)
+        r.raise_for_status()
+        assets=r.json().get('assets',[])
+        asset=next(a for a in assets if a.get('name')=='IVR-Music-Admin.apk')
+        url=asset['browser_download_url']
+        if not url.startswith('https://github.com/charedianus1-lab/ivr-admin/releases/download/'):
+            raise ValueError('invalid release')
+        apk=requests.get(url,timeout=60)
+        apk.raise_for_status()
+        if not apk.content.startswith(b'PK') or len(apk.content)>30*1024*1024:raise ValueError('invalid apk')
+        response=Response(apk.content,mimetype='application/vnd.android.package-archive')
+        response.headers['Content-Disposition']='attachment; filename="IVR-Music-Admin.apk"'
+        response.headers['Cache-Control']='no-store'
+        return response
+    except Exception:
+        return 'קובץ האפליקציה עדיין בהכנה. נסה שוב בעוד כמה דקות.',503
+
 @app.route('/api/ai-plan', methods=['POST'])
 @need_auth
 def api_ai_plan():
@@ -320,7 +341,7 @@ button{background:#3b82f6;border:0;color:#fff;cursor:pointer}button.s{background
 #msg{min-height:22px}.ok{color:#4ade80}.er{color:#f87171}.gr{background:#0f172a;padding:12px;border-radius:8px;line-height:1.7}small{color:#94a3b8}
 
 :root{color-scheme:dark}body{max-width:900px;padding:24px 18px;background:linear-gradient(150deg,#101c32,#0b1120);min-height:100vh}h1{font-size:28px;margin-bottom:6px}.subtitle,.hint{color:#9dadc7;font-size:14px;line-height:1.6}.subtitle{margin-top:0}.steps{display:flex;gap:8px;margin:22px 0;flex-wrap:wrap}.steps span{background:#18253d;border:1px solid #293c59;border-radius:24px;padding:8px 14px;font-size:13px;color:#bbd2f2}.card{background:#152238;border:1px solid #293c59;padding:22px;box-shadow:0 8px 25px #0002}.songs{background:#101c30;margin:12px 0 22px}.sectionline{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.badge{border-radius:20px;background:#234266;color:#b9ddff;padding:5px 10px;font-size:12px}.searchbox{margin:18px 0;padding:14px;background:#182940;border-radius:10px}.searchbox label{display:block;font-size:14px;margin-bottom:10px;color:#b9d0ee}.searchbox input{flex:1;min-width:120px}.number{color:#88a9ce;font-size:13px;min-width:20px;text-align:center}.result{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #2a3b53}.result span{flex:1}.result button{white-space:nowrap}.row{margin-bottom:12px}button{transition:background .15s;min-height:40px}button:hover{filter:brightness(1.12)}button.s{background:#2c415e}button.d{background:#743547}button.g{background:#237766}input,select,textarea{border-color:#36506f;background:#0d192b}input:focus,select:focus{outline:2px solid #5895d2;outline-offset:1px}#msg{margin-top:12px;line-height:1.5}@media(max-width:500px){body{padding:16px 10px}h1{font-size:25px}.card{padding:16px}.song input{flex-basis:45%;width:110px}.steps{gap:5px}.steps span{padding:7px 9px;font-size:11px}.searchbox{padding:10px}.searchbox input{flex-basis:100%;order:1}.searchbox button{order:2;flex:1}.searchbox select{flex:1}.song{flex-wrap:nowrap}.song button{padding:8px;min-width:30px}.number{min-width:12px}}
-</style><h1>ספריית המוזיקה <a href="/logout" style="font-size:13px;color:#94a3b8">יציאה</a></h1><p class="subtitle">שלוחה {{base}} · עורכים, שומרים ובוחרים מתי לפרסם לקו</p><div class="steps"><span>1 · סדר את השלוחות</span><span>2 · הוסף מוזיקה</span><span>3 · שמור ופרסם</span></div>
+</style><h1>ספריית המוזיקה <a href="/logout" style="font-size:13px;color:#94a3b8">יציאה</a></h1><p><a href="/admin/app" style="color:#bbd2f2">הורד אפליקציית ניהול</a></p><p class="subtitle">שלוחה {{base}} · עורכים, שומרים ובוחרים מתי לפרסם לקו</p><div class="steps"><span>1 · סדר את השלוחות</span><span>2 · הוסף מוזיקה</span><span>3 · שמור ופרסם</span></div>
 {% if not ym_ok %}<div class="card er">פרטי ימות לא הוגדרו - פרסום לא יעבוד</div>{% endif %}
 <div class="card"><h3>בונים יחד עם AI</h3><p class="hint">תאר אילו שלוחות ושירים תרצה. תקבל הצעה ותצוגה מקדימה, בלי לשנות את הטיוטה ובלי לפרסם לקו.</p><div id="aiChat" class="gr" style="max-height:260px;overflow:auto"></div><textarea id="aiInput" style="width:100%;box-sizing:border-box;margin:12px 0" placeholder="למשל: בנה שלוחה לשירי אברהם פריד ועוד שלוחה לשירי שבת"></textarea><button id="aiSend" onclick="aiTalk()">שלח ל-AI</button><div id="aiPreview" style="margin-top:16px"></div></div>
 <div class="card"><h3>השלוחות שלך</h3><p class="hint">לכל מקש שם משלו. בחר רשימת שירים כדי להוסיף מוזיקה.</p><div id="rows"></div>
