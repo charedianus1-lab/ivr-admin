@@ -1,0 +1,62 @@
+name: Build IVR Music Admin APK
+on:
+  push:
+    paths: ['.github/workflows/build-ivr-apk.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.7'}
+      - name: Create simple live-site wrapper
+        run: |
+          mkdir -p app/src/main/java/il/ariel/ivradmin app/src/main/res/values
+          cat > settings.gradle <<'G'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name='IVRMusicAdmin'; include ':app'
+          G
+          cat > build.gradle <<'G'
+          plugins { id 'com.android.application' version '8.5.2' apply false }
+          G
+          cat > app/build.gradle <<'G'
+          plugins { id 'com.android.application' }
+          android { namespace 'il.ariel.ivradmin'; compileSdk 35
+            defaultConfig { applicationId 'il.ariel.ivradmin'; minSdk 26; targetSdk 35; versionCode 1; versionName '1.0' }
+          }
+          G
+          cat > app/src/main/AndroidManifest.xml <<'X'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET"/><application android:theme="@style/AppTheme" android:label="ניהול המוזיקה" android:usesCleartextTraffic="false" android:allowBackup="false"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
+          X
+          cat > app/src/main/res/values/styles.xml <<'X'
+          <resources><style name="AppTheme" parent="android:style/Theme.Material.NoActionBar"><item name="android:windowActionModeOverlay">true</item><item name="android:statusBarColor">#101c32</item><item name="android:navigationBarColor">#101c32</item></style></resources>
+          X
+          cat > app/src/main/java/il/ariel/ivradmin/MainActivity.java <<'J'
+          package il.ariel.ivradmin;
+          import android.app.*;import android.os.*;import android.webkit.*;import android.content.*;import android.net.Uri;import android.widget.*;import android.view.*;
+          public class MainActivity extends Activity {
+            WebView web; static final String HOST="ivr-admin-f31f.onbelmo.uk";
+            public void onCreate(Bundle b){super.onCreate(b);web=new WebView(this);FrameLayout root=new FrameLayout(this);root.addView(web,new FrameLayout.LayoutParams(-1,-1));setContentView(root);
+              root.setOnApplyWindowInsetsListener((v,in)->{v.setPadding(in.getSystemWindowInsetLeft(),in.getSystemWindowInsetTop(),in.getSystemWindowInsetRight(),in.getSystemWindowInsetBottom());return in;});root.requestApplyInsets();
+              WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setCacheMode(WebSettings.LOAD_NO_CACHE);s.setAllowFileAccess(false);s.setAllowContentAccess(false);s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+              CookieManager.getInstance().setAcceptCookie(true);
+              web.setWebViewClient(new WebViewClient(){public boolean shouldOverrideUrlLoading(WebView w,WebResourceRequest r){Uri u=r.getUrl();if("https".equals(u.getScheme())&&HOST.equals(u.getHost()))return false;if("https".equals(u.getScheme())){try{startActivity(new Intent(Intent.ACTION_VIEW,u));}catch(Exception e){}}return true;}});
+              web.setWebChromeClient(new WebChromeClient(){public boolean onJsConfirm(WebView w,String url,String message,JsResult r){new AlertDialog.Builder(MainActivity.this).setMessage(message).setPositiveButton("אישור",(d,x)->r.confirm()).setNegativeButton("ביטול",(d,x)->r.cancel()).setOnCancelListener(d->r.cancel()).show();return true;}public boolean onJsAlert(WebView w,String u,String m,JsResult r){new AlertDialog.Builder(MainActivity.this).setMessage(m).setPositiveButton("אישור",(d,x)->r.confirm()).show();return true;}});
+              if(b!=null)web.restoreState(b);else web.loadUrl("https://"+HOST+"/");
+            }
+            public void onBackPressed(){if(web.canGoBack())web.goBack();else super.onBackPressed();}
+            protected void onSaveInstanceState(Bundle b){web.saveState(b);super.onSaveInstanceState(b);}
+            protected void onPause(){CookieManager.getInstance().flush();super.onPause();}
+          }
+          J
+      - run: gradle --no-daemon :app:assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk IVR-Music-Admin.apk
+      - uses: actions/upload-artifact@v4
+        with: {name: IVR-Music-Admin-APK, path: IVR-Music-Admin.apk}
+      - uses: softprops/action-gh-release@v2
+        with: {tag_name: ivr-admin-apk-v1, name: 'Music Admin Android v1', files: IVR-Music-Admin.apk}
